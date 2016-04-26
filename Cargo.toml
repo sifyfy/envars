@@ -1,0 +1,14 @@
+[package]
+name = "envars"
+version = "0.1.0"
+authors = ["siphilia <siphilia.rn@gmail.com>"]
+
+[features]
+default = []
+check = ["clippy", "sorty"]
+
+[dependencies]
+s_app_dir = "*"
+yaml-rust = "0.3.0"
+clippy = { version = "*", optional = true }
+sorty = { git = "https://github.com/Wafflespeanut/rust-sorty", optional = true }

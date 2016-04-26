@@ -1,0 +1,23 @@
+{
+  "name": "envars",
+  "version": "0.0.0",
+  "description": "",
+  "main": "",
+  "scripts": {
+    "build-debug": "cargo build",
+    "build-release": "cargo build --release",
+    "build-check-lib": "cargo rustc --lib --features check -- -Z no-trans",
+    "build-check-bin": "cargo rustc --bin envars --features check -- -Z no-trans",
+    "build-check-watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"(cargo rustc --lib --features check -- -Z no-trans && cargo rustc --bin envars --features check -- -Z no-trans); echo ----------\"",
+    "doc": "cargo doc",
+    "format": "cargo fmt",
+    "format-watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"cargo fmt\"",
+    "test": "cargo test",
+    "watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"(cargo fmt && cargo rustc --lib --features check -- -Z no-trans && cargo rustc --bin envars --features check -- -Z no-trans); echo ----------\""
+  },
+  "author": "Siphilia",
+  "license": "MIT",
+  "devDependencies": {
+    "chokidar-cli": "^1.2.0"
+  }
+}
