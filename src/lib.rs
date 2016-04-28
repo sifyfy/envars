@@ -29,6 +29,7 @@
 
 #![feature(custom_derive)]
 
+extern crate s_app_dir;
 extern crate yaml_rust;
 
 pub mod cmdargs;
@@ -38,15 +39,28 @@ pub mod envset;
 use cmdargs::CmdArgs;
 use command::Command;
 use envset::EnvSet;
+use s_app_dir::{AppDir, XdgDir};
+use std::path::PathBuf;
 
 pub fn start(mode: CmdArgs) {
     match mode {
+        CmdArgs::Edit(env_set) => unimplemented!(),
+        CmdArgs::List => unimplemented!(),
+        CmdArgs::New(env_set) => unimplemented!(),
         CmdArgs::Run(env_set, command) => run(env_set, command),
-        _ => println!("others"),
+        _ => unimplemented!(), // Show help.
     }
 }
 
-fn run(env_set: EnvSet, command: Command) {}
+/// Get `$XDG_CONFIG_HOME`.
+/// If Windows, get `%APPDATA%` instead of `$XDG_CONFIG_HOME`.
+fn env_set_dir() -> PathBuf {
+    AppDir::new("envars").xdg_dir(XdgDir::Config).expect("$XDG_CONFIG_HOME and $HOME are missing.")
+}
+
+fn run(env_set: EnvSet, command: Command) {
+    let config_dir = env_set_dir();
+}
 
 #[cfg(test)]
 mod tests {
