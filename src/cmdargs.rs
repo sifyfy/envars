@@ -22,7 +22,7 @@
 
 use command::Command;
 use envset::EnvSet;
-use std::env::Args;
+use std::env;
 
 pub enum CmdArgs {
     Edit(EnvSet),
@@ -33,14 +33,17 @@ pub enum CmdArgs {
 }
 
 impl CmdArgs {
-    pub fn from_args(args: &mut Args) -> CmdArgs {
-        match args.next().and_then(|mode| Self::parse_args(&mode, args)) {
+    pub fn from_args() -> CmdArgs {
+        let mut args = env::args().skip(1);
+        match args.next().and_then(|mode| Self::parse_args(&mode, &mut args)) {
             Some(mode) => mode,
             None => CmdArgs::Help,
         }
     }
 
-    fn parse_args(mode: &str, args: &mut Args) -> Option<CmdArgs> {
+    fn parse_args<I>(mode: &str, args: &mut I) -> Option<CmdArgs>
+        where I: Iterator<Item = String>
+    {
         match mode {
             "edit" => Self::parse_as_edit(args).map(CmdArgs::Edit),
             "list" => Some(CmdArgs::List),
@@ -50,21 +53,28 @@ impl CmdArgs {
         }
     }
 
-    fn parse_as_edit(args: &mut Args) -> Option<EnvSet> {
+    fn parse_as_edit<I>(args: &mut I) -> Option<EnvSet>
+        where I: Iterator<Item = String>
+    {
         args.next().map(|name| EnvSet::new(&name))
     }
 
-    fn parse_as_new(args: &mut Args) -> Option<EnvSet> {
+    fn parse_as_new<I>(args: &mut I) -> Option<EnvSet>
+        where I: Iterator<Item = String>
+    {
         args.next().map(|name| EnvSet::new(&name))
     }
 
-    fn parse_as_run(args: &mut Args) -> Option<(EnvSet, Command)> {
-        args.next().and_then(|name| {
-            let mut cmd = String::new();
-            for i in args {
-                cmd.push_str()
-            }
+    fn parse_as_run<I>(args: &mut I) -> Option<(EnvSet, Command)>
+        where I: Iterator<Item = String>
+    {
+        args.next().map(|name| {
+            let cmd = args.fold(String::new(), |mut acm, cmd| {
+                acm.push_str(&cmd);
+                acm.push(' ');
+                acm
+            });
+            (EnvSet::new(&name), Command::new(&cmd))
         })
-        Some((EnvSet::new("aa"), Command::new("hoge")))
     }
 }
