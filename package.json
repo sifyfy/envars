@@ -13,7 +13,7 @@
     "format": "cargo fmt",
     "format-watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"cargo fmt\"",
     "test": "cargo test",
-    "watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"(cargo fmt && cargo rustc --lib --features check -- -Z no-trans && cargo rustc --bin envars --features check -- -Z no-trans); echo ----------\""
+    "watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"(cargo rustc --lib --features check -- -Z no-trans && cargo rustc --bin envars --features check -- -Z no-trans); echo ----------\""
   },
   "author": "Siphilia",
   "license": "MIT",
