@@ -20,8 +20,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use std::fmt;
 use std::collections::BTreeMap;
+use std::convert::From;
+use std::error::Error;
 use std::io;
+use std::path;
 use yaml_rust as yaml;
 
 /// `EnvSet`の名前。`ENV_SET_NAME.yaml`としてファイル名に用いられる。
@@ -41,9 +45,51 @@ impl EnvSetName {
     }
 }
 
+#[derive(Debug)]
 pub enum EnvSetError {
     IO(io::Error),
     Yaml(yaml::ScanError),
+    ConfigDirIsNotFound,
+}
+
+impl fmt::Display for EnvSetError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            EnvSetError::IO(e) => write!(f, "EnvSetError(IO): {}", e),
+            EnvSetError::Yaml(e) => write!(f, "EnvSetError(Yaml): {}", e),
+            EnvSetError::ConfigDirIsNotFound => write!(f, "EnvSetError(ConfigDirIsNotFound)"),
+        }
+    }
+}
+
+impl From<io::Error> for EnvSetError {
+    fn from(a: io::Error) -> EnvSetError {
+        EnvSetError::IO(a)
+    }
+}
+
+impl From<yaml::ScanError> for EnvSetError {
+    fn from(a: yaml::ScanError) -> EnvSetError {
+        EnvSetError::Yaml(a)
+    }
+}
+
+impl Error for EnvSetError {
+    fn description(&self) -> &str {
+        match *self {
+            EnvSetError::IO(e) => e.description(),
+            EnvSetError::Yaml(e) => e.description(),
+            EnvSetError::ConfigDirIsNotFound => "Config dir is not found.",
+        }
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        match *self {
+            EnvSetError::IO(e) => Some(&e),
+            EnvSetError::Yaml(e) => Some(&e),
+            EnvSetError::ConfigDirIsNotFound => None,
+        }
+    }
 }
 
 /// `EnvSet`のメモリ上での表現型。
@@ -55,7 +101,7 @@ pub struct EnvSet {
 
 impl EnvSet {
     pub fn new(env_set_name: &EnvSetName) -> Result<EnvSet, EnvSetError> {
-        read_env_set_yaml(env_set_name).map(|env_set_yaml| {
+        Self::read_env_set_yaml(env_set_name).map(|env_set_yaml| {
             EnvSet {
                 name: env_set_name.clone(),
                 set: env_set_yaml,
@@ -63,14 +109,16 @@ impl EnvSet {
         })
     }
 
-    fn read_env_set_yaml(env_set_name: &env_set_name) -> Result<BTreeMap<yaml::Yaml, yaml::Yaml>, EnvSetError> {
-        let result: Result<String, io::Error> = unimplemented!();
-        result.map_err(|io_err| EnvSetError::IO(io_err)).and_then(|content| {
-            yaml::YamlLoader::load_from_str(&content)
-                .map(|vec_yaml| {
-                    vec_yaml.pop().and_then(|yaml| yaml.as_hash()).unwrap_or(BTreeMap::new())
-                })
-                .map_err(|yaml_err| EnvSetError::Yaml(yaml_err))
-        })
+    fn read_env_set_yaml(env_set_name: &EnvSetName)
+                         -> Result<BTreeMap<yaml::Yaml, yaml::Yaml>, EnvSetError> {
+        let content = try!(read_file_content(env_set_name));
+        let root = try!(yaml::YamlLoader::load_from_str(&content));
+        Ok(root.pop().and_then(|yaml| yaml.as_hash()).map(|o| o.clone()).unwrap_or(BTreeMap::new()))
+    }
+
+    fn read_file_content(env_set_name: &EnvSetName) -> Result<String, EnvSetError> {
+        let config_dir = try!(s_app_dir::AppDir::new("envars")
+                                  .xdg_dir(s_app_dir::XdgDir::Config)
+                                  .ok_or(EnvSetError::ConfigDirIsNotFound));
     }
 }
