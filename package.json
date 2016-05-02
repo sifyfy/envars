@@ -6,14 +6,10 @@
   "scripts": {
     "build-debug": "cargo build",
     "build-release": "cargo build --release",
-    "build-check-lib": "cargo rustc --lib --features check -- -Z no-trans",
-    "build-check-bin": "cargo rustc --bin envars --features check -- -Z no-trans",
-    "build-check-watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"(cargo rustc --lib --features check -- -Z no-trans && cargo rustc --bin envars --features check -- -Z no-trans); echo ----------\"",
     "doc": "cargo doc",
     "format": "cargo fmt",
-    "format-watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"cargo fmt\"",
     "test": "cargo test",
-    "watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"(cargo rustc --lib --features check -- -Z no-trans && cargo rustc --bin envars --features check -- -Z no-trans); echo ----------\""
+    "watch": "chokidar \"src/*.rs\" \"src/**/*.rs\" -c \"node js/check.js\""
   },
   "author": "Siphilia",
   "license": "MIT",
