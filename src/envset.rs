@@ -20,13 +20,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::fmt;
+use s_app_dir::{AppDir, XdgDir};
 use std::collections::BTreeMap;
-use std::convert::From;
-use std::error::Error;
+use std::collections::btree_map;
+use std::error;
+use std::fmt;
+use std::fs;
 use std::io;
+use std::io::Read;
 use std::path;
 use yaml_rust as yaml;
+use yaml_rust::Yaml;
 
 /// `EnvSet`の名前。`ENV_SET_NAME.yaml`としてファイル名に用いられる。
 #[derive(Clone, Debug, AsRef, Eq, PartialEq)]
@@ -42,6 +46,12 @@ impl EnvSetName {
         } else {
             None
         }
+    }
+}
+
+impl AsRef<path::Path> for EnvSetName {
+    fn as_ref(&self) -> &path::Path {
+        &self.0.as_ref()
     }
 }
 
@@ -74,7 +84,7 @@ impl From<yaml::ScanError> for EnvSetError {
     }
 }
 
-impl Error for EnvSetError {
+impl error::Error for EnvSetError {
     fn description(&self) -> &str {
         match *self {
             EnvSetError::IO(e) => e.description(),
@@ -83,7 +93,7 @@ impl Error for EnvSetError {
         }
     }
 
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&error::Error> {
         match *self {
             EnvSetError::IO(e) => Some(&e),
             EnvSetError::Yaml(e) => Some(&e),
@@ -96,7 +106,7 @@ impl Error for EnvSetError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnvSet {
     name: EnvSetName,
-    set: BTreeMap<yaml::Yaml, yaml::Yaml>,
+    set: BTreeMap<String, String>,
 }
 
 impl EnvSet {
@@ -109,16 +119,52 @@ impl EnvSet {
         })
     }
 
-    fn read_env_set_yaml(env_set_name: &EnvSetName)
-                         -> Result<BTreeMap<yaml::Yaml, yaml::Yaml>, EnvSetError> {
-        let content = try!(read_file_content(env_set_name));
-        let root = try!(yaml::YamlLoader::load_from_str(&content));
-        Ok(root.pop().and_then(|yaml| yaml.as_hash()).map(|o| o.clone()).unwrap_or(BTreeMap::new()))
+    pub fn iter(&self) -> EnvSetIterator {
+        self.set.iter()
     }
 
-    fn read_file_content(env_set_name: &EnvSetName) -> Result<String, EnvSetError> {
-        let config_dir = try!(s_app_dir::AppDir::new("envars")
-                                  .xdg_dir(s_app_dir::XdgDir::Config)
-                                  .ok_or(EnvSetError::ConfigDirIsNotFound));
+    pub fn env(&self, key: &str) -> Option<&String> {
+        self.set.get(key)
+    }
+
+    fn read_env_set_yaml(env_set_name: &EnvSetName) -> Result<BTreeMap<String, String>, EnvSetError> {
+        let content = try!(Self::read_file_content(&env_set_name));
+        let root = try!(yaml::YamlLoader::load_from_str(&content));
+        Ok(root.pop()
+               .and_then(|yaml| yaml.as_hash())
+               .map(|o| Self::make_set(&o))
+               .unwrap_or_default())
+    }
+
+    fn make_set(orig: &BTreeMap<Yaml, Yaml>) -> BTreeMap<String, String> {
+        let mut set = BTreeMap::new();
+        for (k, v) in orig.iter() {
+            k.as_str()
+             .and_then(|k_| v.as_str().and_then(|v_| set.insert(k_.to_owned(), v_.to_owned())));
+        }
+        set
+    }
+
+    fn read_file_content<P: AsRef<path::Path>>(env_set_name: P) -> Result<String, EnvSetError> {
+        let yaml_path = try!(AppDir::new("envars")
+                                 .xdg_dir(XdgDir::Config)
+                                 .ok_or(EnvSetError::ConfigDirIsNotFound))
+                            .join(env_set_name)
+                            .with_extension("yaml");
+        let yaml_file = try!(fs::File::open(&yaml_path));
+        let mut buf = String::new();
+        try!(yaml_file.read_to_string(&mut buf));
+        Ok(buf)
+    }
+}
+
+pub type EnvSetIterator<'a> = btree_map::Iter<'a, String, String>;
+
+impl<'a> IntoIterator for &'a EnvSet {
+    type Item = (&'a String, &'a String);
+    type IntoIter = EnvSetIterator<'a>;
+
+    fn into_iter(self) -> EnvSetIterator<'a> {
+        self.iter()
     }
 }
