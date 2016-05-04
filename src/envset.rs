@@ -27,8 +27,9 @@ use std::error;
 use std::fmt;
 use std::fs;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path;
+use std::result;
 use yaml_rust as yaml;
 use yaml_rust::Yaml;
 
@@ -58,15 +59,17 @@ impl AsRef<path::Path> for EnvSetName {
 #[derive(Debug)]
 pub enum EnvSetError {
     IO(io::Error),
-    Yaml(yaml::ScanError),
+    LoadYaml(yaml::ScanError),
+    EmitYaml(yaml::EmitError),
     ConfigDirIsNotFound,
 }
 
 impl fmt::Display for EnvSetError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             EnvSetError::IO(e) => write!(f, "EnvSetError(IO): {}", e),
-            EnvSetError::Yaml(e) => write!(f, "EnvSetError(Yaml): {}", e),
+            EnvSetError::LoadYaml(e) => write!(f, "EnvSetError(LoadYaml): {}", e),
+            EnvSetError::EmitYaml(e) => write!(f, "EnvSetError(EmitYaml): {:?}", e),
             EnvSetError::ConfigDirIsNotFound => write!(f, "EnvSetError(ConfigDirIsNotFound)"),
         }
     }
@@ -80,7 +83,13 @@ impl From<io::Error> for EnvSetError {
 
 impl From<yaml::ScanError> for EnvSetError {
     fn from(a: yaml::ScanError) -> EnvSetError {
-        EnvSetError::Yaml(a)
+        EnvSetError::LoadYaml(a)
+    }
+}
+
+impl From<yaml::EmitError> for EnvSetError {
+    fn from(a: yaml::EmitError) -> EnvSetError {
+        EnvSetError::EmitYaml(a)
     }
 }
 
@@ -88,7 +97,8 @@ impl error::Error for EnvSetError {
     fn description(&self) -> &str {
         match *self {
             EnvSetError::IO(e) => e.description(),
-            EnvSetError::Yaml(e) => e.description(),
+            EnvSetError::LoadYaml(e) => e.description(),
+            EnvSetError::EmitYaml(e) => "Error in YamlEmitter.",
             EnvSetError::ConfigDirIsNotFound => "Config dir is not found.",
         }
     }
@@ -96,27 +106,44 @@ impl error::Error for EnvSetError {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             EnvSetError::IO(e) => Some(&e),
-            EnvSetError::Yaml(e) => Some(&e),
+            EnvSetError::LoadYaml(e) => Some(&e),
+            EnvSetError::EmitYaml(e) => None,
             EnvSetError::ConfigDirIsNotFound => None,
         }
     }
 }
 
+type Result<T> = result::Result<T, EnvSetError>;
+
 /// `EnvSet`のメモリ上での表現型。
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnvSet {
     name: EnvSetName,
+    path: path::PathBuf,
     set: BTreeMap<String, String>,
 }
 
+/// CRUD操作を次の様に定義する
+/// C: ファイルが存在してればその内容を、無ければ空オブジェクトで作成
+/// R: 変数名をキーに値を読み取る関数、変数名のリストは`Iterator`で取得
+/// U: 編集はファイルをエディタで開いて行うので、ファイル名を指した状態の`&Path`を返す。
+/// D: 紐づいているファイルを削除する
+///
+/// オブジェクトのファイルへの保存: `write_to_file`関数を用意し、その実行でファイルに書き出す。
 impl EnvSet {
-    pub fn new(env_set_name: &EnvSetName) -> Result<EnvSet, EnvSetError> {
-        Self::read_env_set_yaml(env_set_name).map(|env_set_yaml| {
+    pub fn new(env_set_name: &EnvSetName) -> Result<EnvSet> {
+        let yaml_path = try!(Self::yaml_file_path(&env_set_name));
+        Self::read_env_set_yaml(&yaml_path).map(|env_set_yaml| {
             EnvSet {
                 name: env_set_name.clone(),
+                path: yaml_path,
                 set: env_set_yaml,
             }
         })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty()
     }
 
     pub fn iter(&self) -> EnvSetIterator {
@@ -127,8 +154,41 @@ impl EnvSet {
         self.set.get(key)
     }
 
-    fn read_env_set_yaml(env_set_name: &EnvSetName) -> Result<BTreeMap<String, String>, EnvSetError> {
-        let content = try!(Self::read_file_content(&env_set_name));
+    pub fn file_path(&self) -> &path::Path {
+        self.path.as_path()
+    }
+
+    pub fn remove_file(&self) -> io::Result<()> {
+        fs::remove_file(self.file_path())
+    }
+
+    pub fn write_to_file(&self) -> Result<()> {
+        let file: fs::File = try!(fs::File::open(self.file_path()));
+        let yaml: String = try!(self.make_yaml());
+        try!(file.write_all(yaml.as_bytes()));
+        try!(file.sync_data());
+    }
+
+    fn make_yaml(&self) -> Result<String> {
+        let mut buf = String::new();
+        let emitter = yaml::YamlEmitter::new(&mut buf);
+        let yaml_hash = yaml::Yaml::Hash(self.set
+                                             .iter()
+                                             .map(|(k, v)| (yaml_str(k), yaml_str(v)))
+                                             .collect());
+        try!(emitter.dump(&yaml_hash).map_err(|e| EnvSetError::EmitYaml(e)));
+        Ok(buf)
+    }
+
+    fn yaml_file_path<P: AsRef<path::Path>>(env_set_name: P) -> Result<path::PathBuf> {
+        AppDir::new("envars")
+            .xdg_dir(XdgDir::Config)
+            .ok_or(EnvSetError::ConfigDirIsNotFound)
+            .map(|path| path.join(env_set_name).with_extension("yaml"))
+    }
+
+    fn read_env_set_yaml<P: AsRef<path::Path>>(yaml_path: P) -> Result<BTreeMap<String, String>> {
+        let content = try!(Self::read_file_content(yaml_path));
         let root = try!(yaml::YamlLoader::load_from_str(&content));
         Ok(root.pop()
                .and_then(|yaml| yaml.as_hash())
@@ -145,12 +205,7 @@ impl EnvSet {
         set
     }
 
-    fn read_file_content<P: AsRef<path::Path>>(env_set_name: P) -> Result<String, EnvSetError> {
-        let yaml_path = try!(AppDir::new("envars")
-                                 .xdg_dir(XdgDir::Config)
-                                 .ok_or(EnvSetError::ConfigDirIsNotFound))
-                            .join(env_set_name)
-                            .with_extension("yaml");
+    fn read_file_content<P: AsRef<path::Path>>(yaml_path: P) -> Result<String> {
         let yaml_file = try!(fs::File::open(&yaml_path));
         let mut buf = String::new();
         try!(yaml_file.read_to_string(&mut buf));
@@ -167,4 +222,8 @@ impl<'a> IntoIterator for &'a EnvSet {
     fn into_iter(self) -> EnvSetIterator<'a> {
         self.iter()
     }
+}
+
+fn yaml_str(s: &String) -> yaml::Yaml {
+    yaml::Yaml::String(s.to_owned())
 }
