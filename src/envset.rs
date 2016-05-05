@@ -28,13 +28,14 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::io::{Read, Write};
+use std::ops;
 use std::path;
 use std::result;
 use yaml_rust as yaml;
 use yaml_rust::Yaml;
 
 /// `EnvSet`の名前。`ENV_SET_NAME.yaml`としてファイル名に用いられる。
-#[derive(Clone, Debug, AsRef, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnvSetName(String);
 
 impl EnvSetName {
@@ -50,9 +51,35 @@ impl EnvSetName {
     }
 }
 
+impl ops::Deref for EnvSetName {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
 impl AsRef<path::Path> for EnvSetName {
     fn as_ref(&self) -> &path::Path {
         &self.0.as_ref()
+    }
+}
+
+impl AsRef<String> for EnvSetName {
+    fn as_ref(&self) -> &String {
+        &self.0
+    }
+}
+
+impl AsRef<str> for EnvSetName {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for EnvSetName {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
     }
 }
 
@@ -67,9 +94,9 @@ pub enum EnvSetError {
 impl fmt::Display for EnvSetError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            EnvSetError::IO(e) => write!(f, "EnvSetError(IO): {}", e),
-            EnvSetError::LoadYaml(e) => write!(f, "EnvSetError(LoadYaml): {}", e),
-            EnvSetError::EmitYaml(e) => write!(f, "EnvSetError(EmitYaml): {:?}", e),
+            EnvSetError::IO(ref e) => write!(f, "EnvSetError(IO): {}", e),
+            EnvSetError::LoadYaml(ref e) => write!(f, "EnvSetError(LoadYaml): {}", e),
+            EnvSetError::EmitYaml(ref e) => write!(f, "EnvSetError(EmitYaml): {:?}", e),
             EnvSetError::ConfigDirIsNotFound => write!(f, "EnvSetError(ConfigDirIsNotFound)"),
         }
     }
@@ -96,24 +123,24 @@ impl From<yaml::EmitError> for EnvSetError {
 impl error::Error for EnvSetError {
     fn description(&self) -> &str {
         match *self {
-            EnvSetError::IO(e) => e.description(),
-            EnvSetError::LoadYaml(e) => e.description(),
-            EnvSetError::EmitYaml(e) => "Error in YamlEmitter.",
+            EnvSetError::IO(ref e) => e.description(),
+            EnvSetError::LoadYaml(ref e) => e.description(),
+            EnvSetError::EmitYaml(_) => "Error in YamlEmitter.",
             EnvSetError::ConfigDirIsNotFound => "Config dir is not found.",
         }
     }
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
-            EnvSetError::IO(e) => Some(&e),
-            EnvSetError::LoadYaml(e) => Some(&e),
-            EnvSetError::EmitYaml(e) => None,
+            EnvSetError::IO(ref e) => Some(e),
+            EnvSetError::LoadYaml(ref e) => Some(e),
+            EnvSetError::EmitYaml(_) |
             EnvSetError::ConfigDirIsNotFound => None,
         }
     }
 }
 
-type Result<T> = result::Result<T, EnvSetError>;
+pub type Result<T> = result::Result<T, EnvSetError>;
 
 /// `EnvSet`のメモリ上での表現型。
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -163,21 +190,24 @@ impl EnvSet {
     }
 
     pub fn write_to_file(&self) -> Result<()> {
-        let file: fs::File = try!(fs::File::open(self.file_path()));
+        let mut file: fs::File = try!(fs::File::open(self.file_path()));
         let yaml: String = try!(self.make_yaml());
         try!(file.write_all(yaml.as_bytes()));
         try!(file.sync_data());
+        Ok(())
     }
 
     fn make_yaml(&self) -> Result<String> {
         let mut buf = String::new();
-        let emitter = yaml::YamlEmitter::new(&mut buf);
-        let yaml_hash = yaml::Yaml::Hash(self.set
-                                             .iter()
-                                             .map(|(k, v)| (yaml_str(k), yaml_str(v)))
-                                             .collect());
-        try!(emitter.dump(&yaml_hash).map_err(|e| EnvSetError::EmitYaml(e)));
-        Ok(buf)
+        {
+            let mut emitter = yaml::YamlEmitter::new(&mut buf);
+            let yaml_hash = yaml::Yaml::Hash(self.set
+                                                .iter()
+                                                .map(|(k, v)| (yaml_str(k), yaml_str(v)))
+                                                .collect());
+            try!(emitter.dump(&yaml_hash).map_err(EnvSetError::EmitYaml));
+        }
+        Ok(buf.clone())
     }
 
     fn yaml_file_path<P: AsRef<path::Path>>(env_set_name: P) -> Result<path::PathBuf> {
@@ -188,11 +218,13 @@ impl EnvSet {
     }
 
     fn read_env_set_yaml<P: AsRef<path::Path>>(yaml_path: P) -> Result<BTreeMap<String, String>> {
-        let content = try!(Self::read_file_content(yaml_path));
-        let root = try!(yaml::YamlLoader::load_from_str(&content));
-        Ok(root.pop()
-               .and_then(|yaml| yaml.as_hash())
-               .map(|o| Self::make_set(&o))
+        let content: String = try!(Self::read_file_content(yaml_path));
+        let root: Vec<yaml::Yaml> = try!(yaml::YamlLoader::load_from_str(&content));
+        Ok(root.first()
+               .and_then(|yaml|
+                   yaml.as_hash()
+                    .map(|o| Self::make_set(&o))
+               )
                .unwrap_or_default())
     }
 
@@ -206,7 +238,7 @@ impl EnvSet {
     }
 
     fn read_file_content<P: AsRef<path::Path>>(yaml_path: P) -> Result<String> {
-        let yaml_file = try!(fs::File::open(&yaml_path));
+        let mut yaml_file = try!(fs::File::open(&yaml_path));
         let mut buf = String::new();
         try!(yaml_file.read_to_string(&mut buf));
         Ok(buf)
@@ -224,6 +256,6 @@ impl<'a> IntoIterator for &'a EnvSet {
     }
 }
 
-fn yaml_str(s: &String) -> yaml::Yaml {
+fn yaml_str(s: &str) -> yaml::Yaml {
     yaml::Yaml::String(s.to_owned())
 }

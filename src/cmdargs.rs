@@ -21,14 +21,14 @@
 // SOFTWARE.
 
 use command::Command;
-use envset::EnvSet;
+use envset::EnvSetName;
 use std::env;
 
 pub enum CmdArgs {
-    Edit(EnvSet),
+    Edit(EnvSetName),
     List,
-    New(EnvSet),
-    Run(EnvSet, Command),
+    New(EnvSetName),
+    Run(EnvSetName, Command),
     Help,
 }
 
@@ -53,28 +53,28 @@ impl CmdArgs {
         }
     }
 
-    fn parse_as_edit<I>(args: &mut I) -> Option<EnvSet>
+    fn parse_as_edit<I>(args: &mut I) -> Option<EnvSetName>
         where I: Iterator<Item = String>
     {
-        args.next().map(|name| EnvSet::new(&name))
+        args.next().and_then(|name| EnvSetName::new(&name))
     }
 
-    fn parse_as_new<I>(args: &mut I) -> Option<EnvSet>
+    fn parse_as_new<I>(args: &mut I) -> Option<EnvSetName>
         where I: Iterator<Item = String>
     {
-        args.next().map(|name| EnvSet::new(&name))
+        args.next().and_then(|name| EnvSetName::new(&name))
     }
 
-    fn parse_as_run<I>(args: &mut I) -> Option<(EnvSet, Command)>
+    fn parse_as_run<I>(args: &mut I) -> Option<(EnvSetName, Command)>
         where I: Iterator<Item = String>
     {
-        args.next().map(|name| {
+        args.next().and_then(|name| {
             let cmd = args.fold(String::new(), |mut acm, cmd| {
                 acm.push_str(&cmd);
                 acm.push(' ');
                 acm
             });
-            (EnvSet::new(&name), Command::new(&cmd))
+            EnvSetName::new(&name).map(|env_set_name| (env_set_name, Command::new(&cmd)))
         })
     }
 }

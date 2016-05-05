@@ -27,8 +27,6 @@
 #![cfg_attr(feature="sorty", plugin(sorty))]
 #![cfg_attr(feature="sorty", warn(unsorted_declarations))]
 
-#![feature(custom_derive)]
-
 extern crate s_app_dir;
 extern crate yaml_rust;
 
@@ -38,11 +36,58 @@ pub mod envset;
 
 use cmdargs::CmdArgs;
 use command::Command;
-use envset::EnvSet;
-use s_app_dir::{AppDir, XdgDir};
-use std::path::PathBuf;
+use envset::{EnvSet, EnvSetError, EnvSetName};
+use std::error::Error;
+use std::fmt;
+use std::io;
+use std::result;
 
-pub fn start(mode: CmdArgs) {
+#[derive(Debug)]
+pub enum EnvarsError {
+    EnvSet(EnvSetError),
+    IO(io::Error),
+}
+
+impl fmt::Display for EnvarsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            EnvarsError::EnvSet(ref e) => write!(f, "EnvarsError(EnvSetError): {}", e),
+            EnvarsError::IO(ref e) => write!(f, "EnvarsError(IO): {}", e),
+        }
+    }
+}
+
+impl From<io::Error> for EnvarsError {
+    fn from(e: io::Error) -> EnvarsError {
+        EnvarsError::IO(e)
+    }
+}
+
+impl From<EnvSetError> for EnvarsError {
+    fn from(e: EnvSetError) -> EnvarsError {
+        EnvarsError::EnvSet(e)
+    }
+}
+
+impl Error for EnvarsError {
+    fn description(&self) -> &str {
+        match *self {
+            EnvarsError::EnvSet(ref e) => e.description(),
+            EnvarsError::IO(ref e) => e.description(),
+        }
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        match *self {
+            EnvarsError::EnvSet(ref e) => Some(e),
+            EnvarsError::IO(ref e) => Some(e),
+        }
+    }
+}
+
+pub type Result<T> = result::Result<T, EnvarsError>;
+
+pub fn start(mode: CmdArgs) -> Result<()> {
     match mode {
         CmdArgs::Edit(env_set) => unimplemented!(),
         CmdArgs::List => unimplemented!(),
@@ -52,14 +97,10 @@ pub fn start(mode: CmdArgs) {
     }
 }
 
-/// Get `$XDG_CONFIG_HOME`.
-/// If Windows, get `%APPDATA%` instead of `$XDG_CONFIG_HOME`.
-fn env_set_dir() -> PathBuf {
-    AppDir::new("envars").xdg_dir(XdgDir::Config).expect("$XDG_CONFIG_HOME and $HOME are missing.")
-}
-
-fn run(env_set: EnvSet, command: Command) {
-    let config_dir = env_set_dir();
+/// `EnvSet`の読み込み～環境変数の設定～指定コマンドの実行、を行う。
+fn run(env_set_name: EnvSetName, command: Command) -> Result<()> {
+    let env_set: EnvSet = try!(EnvSet::new(&env_set_name));
+    Ok(())
 }
 
 #[cfg(test)]
