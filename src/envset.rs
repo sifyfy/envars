@@ -202,9 +202,9 @@ impl EnvSet {
         {
             let mut emitter = yaml::YamlEmitter::new(&mut buf);
             let yaml_hash = yaml::Yaml::Hash(self.set
-                                                .iter()
-                                                .map(|(k, v)| (yaml_str(k), yaml_str(v)))
-                                                .collect());
+                                                 .iter()
+                                                 .map(|(k, v)| (yaml_str(k), yaml_str(v)))
+                                                 .collect());
             try!(emitter.dump(&yaml_hash).map_err(EnvSetError::EmitYaml));
         }
         Ok(buf.clone())
@@ -221,10 +221,10 @@ impl EnvSet {
         let content: String = try!(Self::read_file_content(yaml_path));
         let root: Vec<yaml::Yaml> = try!(yaml::YamlLoader::load_from_str(&content));
         Ok(root.first()
-               .and_then(|yaml|
+               .and_then(|yaml| {
                    yaml.as_hash()
-                    .map(|o| Self::make_set(&o))
-               )
+                       .map(|o| Self::make_set(&o))
+               })
                .unwrap_or_default())
     }
 

@@ -31,21 +31,22 @@ extern crate s_app_dir;
 extern crate yaml_rust;
 
 pub mod cmdargs;
-pub mod command;
 pub mod envset;
 
 use cmdargs::CmdArgs;
-use command::Command;
 use envset::{EnvSet, EnvSetError, EnvSetName};
 use std::error::Error;
 use std::fmt;
 use std::io;
+use std::process;
+use std::process::Command;
 use std::result;
 
 #[derive(Debug)]
 pub enum EnvarsError {
     EnvSet(EnvSetError),
     IO(io::Error),
+    ProcessFail(process::ExitStatus),
 }
 
 impl fmt::Display for EnvarsError {
@@ -53,6 +54,9 @@ impl fmt::Display for EnvarsError {
         match *self {
             EnvarsError::EnvSet(ref e) => write!(f, "EnvarsError(EnvSetError): {}", e),
             EnvarsError::IO(ref e) => write!(f, "EnvarsError(IO): {}", e),
+            EnvarsError::ProcessFail(ref status) => {
+                write!(f, "EnvarsError(ProcessFail): {}", status)
+            }
         }
     }
 }
@@ -74,6 +78,7 @@ impl Error for EnvarsError {
         match *self {
             EnvarsError::EnvSet(ref e) => e.description(),
             EnvarsError::IO(ref e) => e.description(),
+            EnvarsError::ProcessFail(_) => "Running child process was fail.",
         }
     }
 
@@ -81,26 +86,54 @@ impl Error for EnvarsError {
         match *self {
             EnvarsError::EnvSet(ref e) => Some(e),
             EnvarsError::IO(ref e) => Some(e),
+            EnvarsError::ProcessFail(_) => None,
         }
     }
 }
 
 pub type Result<T> = result::Result<T, EnvarsError>;
 
-pub fn start(mode: CmdArgs) -> Result<()> {
-    match mode {
-        CmdArgs::Edit(env_set) => unimplemented!(),
+pub fn start(mode: &mut CmdArgs) -> Result<()> {
+    match *mode {
+        CmdArgs::Edit(ref env_set) => unimplemented!(),
         CmdArgs::List => unimplemented!(),
-        CmdArgs::New(env_set) => unimplemented!(),
-        CmdArgs::Run(env_set, command) => run(env_set, command),
+        CmdArgs::New(ref env_set) => unimplemented!(),
+        CmdArgs::Run(ref env_set, ref mut cmd) => run(env_set, cmd),
         _ => unimplemented!(), // Show help.
     }
 }
 
 /// `EnvSet`の読み込み～環境変数の設定～指定コマンドの実行、を行う。
-fn run(env_set_name: EnvSetName, command: Command) -> Result<()> {
+fn run(env_set_name: &EnvSetName, cmd: &mut Command) -> Result<()> {
     let env_set: EnvSet = try!(EnvSet::new(&env_set_name));
-    Ok(())
+
+    for (k, v) in env_set.iter() {
+        cmd.env(k, v);
+    }
+    cmd.stdin(process::Stdio::inherit());
+    cmd.stdout(process::Stdio::inherit());
+    cmd.stderr(process::Stdio::inherit());
+
+    let mut handle: process::Child = try!(cmd.spawn());
+    let exit_status: process::ExitStatus = try!(handle.wait());
+
+    if exit_status.success() {
+        Ok(())
+    } else {
+        Err(EnvarsError::ProcessFail(exit_status))
+    }
+}
+
+/// MODE別詳細ヘルプを出すか、一気にまとめて書くか
+fn help() -> Result<()> {
+    println!("Usage: envars MODE [OPTIONS]
+MODE:
+    * run
+    * list
+    * new
+    * edit
+    * help
+");
 }
 
 #[cfg(test)]

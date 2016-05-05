@@ -20,9 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use command::Command;
 use envset::EnvSetName;
 use std::env;
+use std::process::Command;
 
 pub enum CmdArgs {
     Edit(EnvSetName),
@@ -68,13 +68,16 @@ impl CmdArgs {
     fn parse_as_run<I>(args: &mut I) -> Option<(EnvSetName, Command)>
         where I: Iterator<Item = String>
     {
-        args.next().and_then(|name| {
-            let cmd = args.fold(String::new(), |mut acm, cmd| {
-                acm.push_str(&cmd);
-                acm.push(' ');
-                acm
-            });
-            EnvSetName::new(&name).map(|env_set_name| (env_set_name, Command::new(&cmd)))
-        })
+        args.next()
+            .and_then(|name| EnvSetName::new(&name))
+            .and_then(|env_set_name| {
+                args.next().map(|program| {
+                    let mut cmd = Command::new(&program);
+                    for i in args {
+                        cmd.arg(&i);
+                    }
+                    (env_set_name, cmd)
+                })
+            })
     }
 }
