@@ -91,20 +91,32 @@ impl Error for EnvarsError {
     }
 }
 
-pub type Result<T> = result::Result<T, EnvarsError>;
+pub type Result = result::Result<(), EnvarsError>;
 
-pub fn start(mode: &mut CmdArgs) -> Result<()> {
+pub fn start(mode: &mut CmdArgs) -> Result {
     match *mode {
-        CmdArgs::Edit(ref env_set) => unimplemented!(),
-        CmdArgs::List => unimplemented!(),
-        CmdArgs::New(ref env_set) => unimplemented!(),
+        CmdArgs::Edit(ref env_set) => edit(env_set),
+        CmdArgs::List => list(),
+        CmdArgs::New(ref env_set) => new(env_set),
         CmdArgs::Run(ref env_set, ref mut cmd) => run(env_set, cmd),
-        _ => unimplemented!(), // Show help.
+        _ => help(), // Show help.
     }
 }
 
+fn edit(env_set_name: &EnvSetName) -> Result {
+    unimplemented!();
+}
+
+fn list() -> Result {
+    unimplemented!();
+}
+
+fn new(env_set_name: &EnvSetName) -> Result {
+    unimplemented!();
+}
+
 /// `EnvSet`の読み込み～環境変数の設定～指定コマンドの実行、を行う。
-fn run(env_set_name: &EnvSetName, cmd: &mut Command) -> Result<()> {
+fn run(env_set_name: &EnvSetName, cmd: &mut Command) -> Result {
     let env_set: EnvSet = try!(EnvSet::new(&env_set_name));
 
     for (k, v) in env_set.iter() {
@@ -125,7 +137,7 @@ fn run(env_set_name: &EnvSetName, cmd: &mut Command) -> Result<()> {
 }
 
 /// MODE別詳細ヘルプを出すか、一気にまとめて書くか
-fn help() -> Result<()> {
+fn help() -> Result {
     println!("Usage: envars MODE [OPTIONS]
 MODE:
     * run
@@ -133,7 +145,15 @@ MODE:
     * new
     * edit
     * help
+
+Usage
+    run:    envars run ENV_SET_NAME COMMAND
+    list:   envars list
+    new:    envars new ENV_SET_NAME
+    edit:   envars edit ENV_SET_NAME
+    help:   envars help
 ");
+    Ok(())
 }
 
 #[cfg(test)]
