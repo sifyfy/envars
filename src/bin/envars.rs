@@ -31,17 +31,16 @@
 
 extern crate envars;
 
+use envars::cmdargs::CmdArgs;
+use std::process;
+
 fn main() {
-    let x = if 1 > 3 {
-        1
-    } else {
-        3
-    };
-    println!("Hello, world!, {}",
-             1 + 2 +
-             if 5 < 6 {
-                 13
-             } else {
-                 19
-             });
+    let mut args = CmdArgs::from_args();
+    match envars::start(&mut args) {
+        Err(error) => {
+            println!("{}", error);
+            process::exit(1);
+        }
+        Ok(_) => process::exit(0),
+    }
 }
