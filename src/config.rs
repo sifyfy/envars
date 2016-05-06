@@ -22,8 +22,15 @@
 
 use error::{Error, Result};
 use s_app_dir::{AppDir, XdgDir};
+use std::fs;
 use std::path::PathBuf;
 
 pub fn config_dir() -> Result<PathBuf> {
     AppDir::new("envars").xdg_dir(XdgDir::Config).ok_or(Error::ConfigDirIsNotFound)
+}
+
+pub fn create_config_dir() -> Result<()> {
+    let config_dir: PathBuf = try!(config_dir());
+    try!(fs::create_dir_all(&config_dir));
+    Ok(())
 }

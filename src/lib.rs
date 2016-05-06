@@ -45,6 +45,7 @@ use std::process;
 use std::process::Command;
 
 pub fn start(mode: &mut CmdArgs) -> Result<()> {
+    try!(config::create_config_dir());
     match *mode {
         CmdArgs::Edit(ref env_set) => edit(env_set),
         CmdArgs::List => list(),
@@ -82,10 +83,11 @@ fn edit(env_set_name: &EnvSetName) -> Result<()> {
 
 fn list() -> Result<()> {
     let config_dir: path::PathBuf = try!(config::config_dir());
+    println!("{}:", config_dir.to_str().unwrap_or("$XDG_CONFIG_HOME/envars"));
     for i in try!(fs::read_dir(&config_dir)) {
         let entry: fs::DirEntry = try!(i);
         if let Some(name) = entry.file_name().to_str() {
-            println!("{}", name);
+            println!("  {}", name);
         }
     }
     Ok(())
@@ -128,24 +130,15 @@ fn run(env_set_name: &EnvSetName, cmd: &mut Command) -> Result<()> {
     }
 }
 
-/// MODE別詳細ヘルプを出すか、一気にまとめて書くか
 fn help() -> Result<()> {
-    println!("Usage: envars MODE [OPTIONS]
-MODE:
-    * run
-    * list
-    * new
-    * edit
-    * help
+    println!("[Usage]
+  * `envars run ENV_SET_NAME COMMAND`
+  * `envars list`
+  * `envars new ENV_SET_NAME`
+  * `envars edit ENV_SET_NAME`
+  * `envars help`
 
-Usage
-    run:    envars run ENV_SET_NAME COMMAND
-    list:   envars list
-    new:    envars new ENV_SET_NAME
-    edit:   envars edit ENV_SET_NAME
-    help:   envars help
-
-`edit` mode open the EnvSet file with the editor (defined $EDITOR or %EDITOR%).
+`edit` mode open the EnvSet file with the editor (defined `$EDITOR` or `%EDITOR%`).
 ");
     Ok(())
 }
