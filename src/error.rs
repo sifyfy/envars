@@ -47,9 +47,7 @@ impl fmt::Display for Error {
             Error::EnvSetExistsWhenInitializing => {
                 write!(f, "EnvSet file exists when initializing")
             }
-            Error::ProcessFail(ref status) => {
-                write!(f, "Process failed ({})", status)
-            }
+            Error::ProcessFail(ref status) => write!(f, "Process failed ({})", status),
         }
     }
 }

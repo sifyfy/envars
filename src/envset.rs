@@ -164,8 +164,7 @@ impl EnvSet {
     }
 
     pub fn yaml_file_path<P: AsRef<path::Path>>(env_set_name: P) -> Result<path::PathBuf> {
-        config::config_dir()
-            .map(|path| path.join(env_set_name).with_extension("yaml"))
+        config::config_dir().map(|path| path.join(env_set_name).with_extension("yaml"))
     }
 
     fn make_yaml(&self) -> Result<String> {
