@@ -38,6 +38,7 @@ pub mod error;
 use cmdargs::CmdArgs;
 use envset::{EnvSet, EnvSetName};
 use error::{Error, Result};
+use std::env;
 use std::fs;
 use std::path;
 use std::process;
@@ -53,8 +54,30 @@ pub fn start(mode: &mut CmdArgs) -> Result<()> {
     }
 }
 
+#[cfg(windows)]
+fn default_editor() -> String {
+    "notepad".to_owned()
+}
+
+#[cfg(not(windows))]
+fn default_editor() -> String {
+    "vi".to_owned()
+}
+
 fn edit(env_set_name: &EnvSetName) -> Result<()> {
-    unimplemented!();
+    let path: path::PathBuf = try!(EnvSet::yaml_file_path(&env_set_name));
+    let editor = env::var("EDITOR").unwrap_or_else(|_| default_editor());
+
+    let mut cmd = Command::new(&editor);
+    cmd.arg(&path);
+    cmd.stdin(process::Stdio::inherit());
+    cmd.stdout(process::Stdio::inherit());
+    cmd.stderr(process::Stdio::inherit());
+
+    let mut handle: process::Child = try!(cmd.spawn());
+    try!(handle.wait());
+
+    Ok(())
 }
 
 fn list() -> Result<()> {
@@ -121,6 +144,8 @@ Usage
     new:    envars new ENV_SET_NAME
     edit:   envars edit ENV_SET_NAME
     help:   envars help
+
+`edit` mode open the EnvSet file with the editor (defined $EDITOR or %EDITOR%).
 ");
     Ok(())
 }
