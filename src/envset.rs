@@ -143,7 +143,7 @@ impl EnvSet {
     }
 
     pub fn write_to_file(&self) -> Result<()> {
-        let mut file: fs::File = try!(fs::File::open(self.file_path()));
+        let mut file: fs::File = try!(fs::File::create(self.file_path()));
         let yaml: String = try!(self.make_yaml());
         try!(file.write_all(yaml.as_bytes()));
         try!(file.sync_data());
