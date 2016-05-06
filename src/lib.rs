@@ -38,6 +38,8 @@ pub mod error;
 use cmdargs::CmdArgs;
 use envset::{EnvSet, EnvSetName};
 use error::{Error, Result};
+use std::fs;
+use std::path;
 use std::process;
 use std::process::Command;
 
@@ -56,7 +58,14 @@ fn edit(env_set_name: &EnvSetName) -> Result<()> {
 }
 
 fn list() -> Result<()> {
-    unimplemented!();
+    let config_dir: path::PathBuf = try!(config::config_dir());
+    for i in try!(fs::read_dir(&config_dir)) {
+        let entry: fs::DirEntry = try!(i);
+        if let Some(name) = entry.file_name().to_str() {
+            println!("{}", name);
+        }
+    }
+    Ok(())
 }
 
 fn new(env_set_name: &EnvSetName) -> Result<()> {
